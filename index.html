@@ -79,7 +79,21 @@ textarea{resize:vertical;min-height:70px}
 .dsem button.on{background:var(--acento);border-color:var(--acento);color:#fff}
 .dias-sel{display:grid;gap:4px;font-size:12px;color:var(--suave)}
 .rec{opacity:.85;font-size:.9em;margin-right:3px}
-@media (max-width:900px){main{flex-direction:column}aside{width:auto}#cal{min-height:520px}}
+.login{position:fixed;inset:0;background:var(--bg);display:grid;place-items:center;z-index:50;padding:16px}
+.login[hidden]{display:none}
+.login-card{background:var(--card);border:1px solid var(--borde);border-radius:16px;padding:26px;width:min(380px,100%);display:grid;gap:12px;box-shadow:0 10px 40px rgba(0,0,0,.08)}
+.login-card h2{margin:0;font-size:24px}
+.login-card .sub{margin:0;color:var(--suave)}
+.login-card .prim{padding:10px}
+.link{border:0;background:none;color:var(--acento);padding:2px}
+.lerr{margin:0;color:var(--rojo);font-size:13px;min-height:0}
+.lerr:empty{display:none}
+#loginCargando{color:var(--suave);text-align:center}
+#cuentaBtn{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#1f2328;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:60;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+#toast[hidden]{display:none}
+@media (max-width:600px){header h1{min-width:0;font-size:19px}header{padding:12px}main{padding:0 12px 12px}#cuentaBtn{max-width:150px}}
+@media (max-width:900px){body{height:auto;min-height:100vh}main{flex-direction:column}aside{width:auto}#cal{min-height:460px}#listaDia,#listaProx{max-height:none;flex:none}}
 </style>
 </head>
 <body>
@@ -90,6 +104,7 @@ textarea{resize:vertical;min-height:70px}
   <button id="hoyBtn">Hoy</button>
   <div class="esp"></div>
   <button id="notiBtn">🔔 Activar avisos</button>
+  <button id="cuentaBtn" hidden title="Tu cuenta"></button>
   <button class="prim" id="nuevoBtn">+ Nuevo</button>
 </header>
 <div id="aviso"><span id="avisoTxt"></span><button id="avisoX">Vale</button></div>
@@ -107,6 +122,21 @@ textarea{resize:vertical;min-height:70px}
     </div>
   </aside>
 </main>
+
+<div class="login" id="login">
+  <div id="loginCargando">Cargando…</div>
+  <form class="login-card" id="loginForm" hidden>
+    <h2>📅 Mi Agenda</h2>
+    <p class="sub" id="loginSub">Entra con tu cuenta para tener la misma agenda en el PC y en el móvil.</p>
+    <label>Email<input type="email" id="lEmail" required autocomplete="email"></label>
+    <label>Contraseña<input type="password" id="lPass" required minlength="6" autocomplete="current-password"></label>
+    <p class="lerr" id="lErr"></p>
+    <button class="prim" id="lEntrar">Entrar</button>
+    <button type="button" id="lModo">¿No tienes cuenta? Crea una</button>
+    <button type="button" class="link" id="lOlvido">¿Has olvidado la contraseña?</button>
+  </form>
+</div>
+<div id="toast" hidden></div>
 
 <dialog id="dlg">
   <form method="dialog" id="form">
@@ -152,8 +182,10 @@ const $=id=>document.getElementById(id);
 // ---------- almacenamiento
 function cargar(k,def){try{return JSON.parse(localStorage.getItem(k))??def}catch{return def}}
 function guardarK(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){alert("No se pudo guardar: "+e.message)}}
-let eventos=cargar(K_EV,[]);
-const guardar=()=>guardarK(K_EV,eventos);
+let eventos=[]; // llegan de la nube (ver módulo Firebase al final)
+const guardar=()=>window.nube?.guardar(eventos);
+window.setEventos=arr=>{eventos=arr;refrescar();comprobarAvisos()};
+function toast(t,ms=4000){const el=$("toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,ms)}
 
 // ---------- fechas
 const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -306,8 +338,10 @@ $("form").onsubmit=ev=>{
   const datos={titulo:t,tipo:tipoSel,fecha:f,hora:$("fHora").value,antelacion:Number($("fAntelacion").value),notas:$("fNotas").value.trim()};
   if(rep)datos.rep={dias:[...diasSel].sort(),hasta};
   if(editando){
-    Object.assign(editando,datos);
-    if(!rep){delete editando.rep;delete editando.hechos;delete editando.excl}
+    let cur=eventos.find(x=>x.id===editando.id);
+    if(!cur){cur=editando;eventos.push(cur)}
+    Object.assign(cur,datos);
+    if(!rep){delete cur.rep;delete cur.hechos;delete cur.excl}
   } else eventos.push({id:crypto.randomUUID?crypto.randomUUID():Date.now()+""+Math.random(),hecho:false,...datos});
   guardar(); sel=ocurrencia||f; const d=deIso(sel); vista=new Date(d.getFullYear(),d.getMonth(),1);
   refrescar(); setTimeout(comprobarAvisos,300);
@@ -316,11 +350,12 @@ $("cancelar").onclick=()=>$("dlg").close();
 $("borrar").onclick=()=>{
   if(!editando)return;
   const msg=editando.rep?`¿Eliminar «${editando.titulo}» de todas las semanas?`:`¿Eliminar «${editando.titulo}»?`;
-  if(confirm(msg)){eventos=eventos.filter(e=>e!==editando);guardar();$("dlg").close();refrescar()}
+  if(confirm(msg)){eventos=eventos.filter(e=>e.id!==editando.id);guardar();$("dlg").close();refrescar()}
 };
 $("borrarDia").onclick=()=>{
   if(!editando||!ocurrencia)return;
-  (editando.excl??=[]).push(ocurrencia); if(editando.hechos)delete editando.hechos[ocurrencia];
+  const cur=eventos.find(x=>x.id===editando.id); if(!cur){$("dlg").close();return}
+  (cur.excl??=[]).push(ocurrencia); if(cur.hechos)delete cur.hechos[ocurrencia];
   guardar();$("dlg").close();refrescar();
 };
 
@@ -380,7 +415,7 @@ $("fichero").onchange=async ev=>{
   const f=ev.target.files[0]; if(!f)return;
   try{const datos=JSON.parse(await f.text()); if(!Array.isArray(datos))throw 0;
     const ids=new Set(eventos.map(e=>e.id)); const nuevos=datos.filter(e=>e&&e.id&&e.fecha&&!ids.has(e.id));
-    eventos.push(...nuevos); guardar(); refrescar(); alert(`Restaurados ${nuevos.length} elementos.`);
+    eventos.push(...nuevos); guardar(); refrescar(); toast(`Restaurados ${nuevos.length} elementos.`);
   }catch{alert("Ese archivo no es una copia válida de Mi Agenda.")}
   ev.target.value="";
 };
@@ -388,8 +423,99 @@ $("fichero").onchange=async ev=>{
 // ---------- arranque
 let ultimoDia=iso(hoy());
 setInterval(()=>{ if(iso(hoy())!==ultimoDia){ultimoDia=iso(hoy());refrescar()} comprobarAvisos() },15*60*1000);
-window.addEventListener("storage",e=>{if(e.key===K_EV){eventos=cargar(K_EV,[]);refrescar()}});
 estadoNoti(); refrescar(); setTimeout(comprobarAvisos,800);
+</script>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendPasswordResetEmail,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,collection,onSnapshot,writeBatch,doc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const app=initializeApp({
+  apiKey:"AIzaSyBxdu4N16Gm1uVy_KPvpJsdiukKtbv7SqY",
+  authDomain:"mi-agenda-ee583.firebaseapp.com",
+  projectId:"mi-agenda-ee583",
+  storageBucket:"mi-agenda-ee583.firebasestorage.app",
+  messagingSenderId:"1018157307639",
+  appId:"1:1018157307639:web:aeab620ce5f0b0d5cf65f2"
+});
+const auth=getAuth(app); auth.languageCode="es";
+let db;
+try{db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})})}
+catch{db=initializeFirestore(app,{})}
+
+const $=id=>document.getElementById(id);
+let uid=null, unsub=null, sync=new Map(), registrar=false;
+
+// ----- guardar: solo sube lo que ha cambiado
+window.nube={guardar(arr){
+  if(!uid)return;
+  const ops=[], ids=new Set();
+  for(const e of arr){ids.add(e.id);const j=JSON.stringify(e);if(sync.get(e.id)!==j){ops.push(["set",e.id,JSON.parse(j)]);sync.set(e.id,j)}}
+  for(const id of [...sync.keys()])if(!ids.has(id)){ops.push(["del",id]);sync.delete(id)}
+  for(let i=0;i<ops.length;i+=400){
+    const b=writeBatch(db);
+    for(const[t,id,d] of ops.slice(i,i+400)){const r=doc(db,"usuarios",uid,"eventos",id);t==="set"?b.set(r,d):b.delete(r)}
+    b.commit().catch(err=>alert("No se pudo guardar en tu cuenta: "+err.message));
+  }
+}};
+
+// ----- lo que había guardado solo en este dispositivo se sube una vez
+function migrar(nube){
+  let local=[]; try{local=JSON.parse(localStorage.getItem("miAgenda.eventos"))||[]}catch{}
+  if(!local.length)return;
+  const ids=new Set(nube.map(e=>e.id)); const nuevos=local.filter(e=>e&&e.id&&!ids.has(e.id));
+  try{localStorage.setItem("miAgenda.eventos.antiguo",localStorage.getItem("miAgenda.eventos"));localStorage.removeItem("miAgenda.eventos")}catch{}
+  if(nuevos.length){window.nube.guardar([...nube,...nuevos]);window.toast?.(`He pasado a tu cuenta ${nuevos.length===1?"1 cosa que tenías":nuevos.length+" cosas que tenías"} guardadas en este dispositivo.`,6000)}
+}
+
+onAuthStateChanged(auth,user=>{
+  if(unsub){unsub();unsub=null}
+  $("loginCargando").hidden=true;
+  if(!user){
+    uid=null; sync=new Map(); window.setEventos([]);
+    $("cuentaBtn").hidden=true; $("login").hidden=false; $("loginForm").hidden=false; $("lPass").value="";
+    return;
+  }
+  uid=user.uid;
+  $("login").hidden=true; $("cuentaBtn").hidden=false; $("cuentaBtn").textContent="👤 "+user.email;
+  let primera=true;
+  unsub=onSnapshot(collection(db,"usuarios",uid,"eventos"),snap=>{
+    const arr=snap.docs.map(d=>d.data());
+    sync=new Map(arr.map(e=>[e.id,JSON.stringify(e)]));
+    window.setEventos(arr);
+    if(primera){primera=false;migrar(arr)}
+  },err=>alert("No se pudo cargar tu agenda: "+err.message));
+});
+
+// ----- formulario de acceso
+const ERR={"auth/invalid-credential":"Email o contraseña incorrectos.","auth/wrong-password":"Email o contraseña incorrectos.","auth/user-not-found":"No hay ninguna cuenta con ese email.",
+  "auth/email-already-in-use":"Ya existe una cuenta con ese email. Pulsa «¿Ya tienes cuenta? Entra».","auth/weak-password":"La contraseña tiene que tener al menos 6 caracteres.",
+  "auth/invalid-email":"Ese email no es válido.","auth/missing-password":"Escribe la contraseña.","auth/too-many-requests":"Demasiados intentos. Espera un momento y vuelve a probar.",
+  "auth/network-request-failed":"No hay conexión a internet."};
+const msg=e=>ERR[e.code]||e.message;
+function modo(){
+  $("lEntrar").textContent=registrar?"Crear cuenta":"Entrar";
+  $("lModo").textContent=registrar?"¿Ya tienes cuenta? Entra":"¿No tienes cuenta? Crea una";
+  $("loginSub").textContent=registrar?"Crea tu cuenta con tu email y una contraseña (mínimo 6 caracteres).":"Entra con tu cuenta para tener la misma agenda en el PC y en el móvil.";
+  $("lPass").autocomplete=registrar?"new-password":"current-password";
+  $("lOlvido").hidden=registrar; $("lErr").textContent="";
+}
+$("lModo").onclick=()=>{registrar=!registrar;modo()};
+$("loginForm").onsubmit=async ev=>{
+  ev.preventDefault(); $("lErr").textContent=""; $("lEntrar").disabled=true;
+  const email=$("lEmail").value.trim(), pass=$("lPass").value;
+  try{ registrar?await createUserWithEmailAndPassword(auth,email,pass):await signInWithEmailAndPassword(auth,email,pass) }
+  catch(e){$("lErr").textContent=msg(e)}
+  $("lEntrar").disabled=false;
+};
+$("lOlvido").onclick=async()=>{
+  const email=$("lEmail").value.trim();
+  if(!email){$("lErr").textContent="Escribe primero tu email arriba.";return}
+  try{await sendPasswordResetEmail(auth,email);$("lErr").textContent="";window.toast?.("Te he enviado un email para cambiar la contraseña (mira también en spam).",7000)}
+  catch(e){$("lErr").textContent=msg(e)}
+};
+$("cuentaBtn").onclick=()=>{if(confirm(`Has entrado como ${auth.currentUser?.email}.\n\n¿Cerrar sesión en este dispositivo?`))signOut(auth)};
+modo();
 </script>
 </body>
 </html>
