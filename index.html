@@ -71,6 +71,14 @@ textarea{resize:vertical;min-height:70px}
 .tipos{display:flex;gap:6px;flex-wrap:wrap}
 .tipos button{border-radius:20px;padding:4px 12px;font-size:13px}
 .tipos button.on{color:#fff}
+.rep{border:1px solid var(--borde);border-radius:8px;padding:8px 10px;display:grid;gap:8px}
+.chkl{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--txt);cursor:pointer}
+.chkl input{width:16px;height:16px;margin:0}
+.dsem{display:flex;gap:5px}
+.dsem button{width:36px;height:34px;padding:0;border-radius:50%;font-weight:600;font-size:13px}
+.dsem button.on{background:var(--acento);border-color:var(--acento);color:#fff}
+.dias-sel{display:grid;gap:4px;font-size:12px;color:var(--suave)}
+.rec{opacity:.85;font-size:.9em;margin-right:3px}
 @media (max-width:900px){main{flex-direction:column}aside{width:auto}#cal{min-height:520px}}
 </style>
 </head>
@@ -103,19 +111,28 @@ textarea{resize:vertical;min-height:70px}
 <dialog id="dlg">
   <form method="dialog" id="form">
     <h3 id="dlgTitulo">Nuevo</h3>
-    <label>Título<input id="fTitulo" required maxlength="120" placeholder="Ej.: Entrega memoria TFG"></label>
+    <label>Título<input id="fTitulo" required maxlength="120" placeholder="Ej.: Entrega memoria TFG, Entreno de vóley…"></label>
     <label>Tipo<div class="tipos" id="fTipos"></div></label>
     <div class="fila">
-      <label>Fecha<input type="date" id="fFecha" required></label>
+      <label><span id="lblFecha">Fecha</span><input type="date" id="fFecha" required></label>
       <label>Hora (opcional)<input type="time" id="fHora"></label>
       <label>Avisar desde<select id="fAntelacion">
         <option value="7">7 días antes</option><option value="3">3 días antes</option>
         <option value="1">1 día antes</option><option value="0">El mismo día</option>
       </select></label>
     </div>
+    <div class="rep">
+      <label class="chkl"><input type="checkbox" id="fRepite"> 🔁 Se repite cada semana</label>
+      <div id="fRepOpc" class="dias-sel" hidden>
+        Qué días:
+        <div class="dsem" id="fDias"></div>
+        <label>Hasta (opcional, vacío = siempre)<input type="date" id="fHasta"></label>
+      </div>
+    </div>
     <label>Notas<textarea id="fNotas" placeholder="Detalles, enlace, sala…"></textarea></label>
     <div class="acciones">
       <button type="button" class="peligro" id="borrar">Eliminar</button>
+      <button type="button" class="peligro" id="borrarDia" hidden>Quitar solo este día</button>
       <div class="esp"></div>
       <button type="button" id="cancelar">Cancelar</button>
       <button class="prim" id="guardar" value="ok">Guardar</button>
@@ -124,10 +141,11 @@ textarea{resize:vertical;min-height:70px}
 </dialog>
 
 <script>
-const TIPOS={"Entrega":"#e5484d","Reunión":"#3e63dd","Examen":"#8e4ec6","Tarea":"#f76b15","Otro":"#30a46c"};
+const TIPOS={"Entrega":"#e5484d","Reunión":"#3e63dd","Examen":"#8e4ec6","Tarea":"#f76b15","Deporte":"#12a594","Otro":"#30a46c"};
 const MESES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DIAS=["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 const DIAS_L=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+const SEM=[[1,"L"],[2,"M"],[3,"X"],[4,"J"],[5,"V"],[6,"S"],[0,"D"]]; // getDay() + letra
 const K_EV="miAgenda.eventos", K_AV="miAgenda.avisos";
 const $=id=>document.getElementById(id);
 
@@ -141,6 +159,7 @@ const guardar=()=>guardarK(K_EV,eventos);
 const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 const deIso=s=>{const[a,m,d]=s.split("-").map(Number);return new Date(a,m-1,d)};
 const hoy=()=>{const d=new Date();d.setHours(0,0,0,0);return d};
+const masDias=(d,n)=>{const r=new Date(d);r.setDate(r.getDate()+n);return r};
 const diasHasta=s=>Math.round((deIso(s)-hoy())/864e5);
 const bonita=s=>{const d=deIso(s);return `${DIAS_L[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`};
 function restante(n){
@@ -149,6 +168,30 @@ function restante(n){
 }
 const color=e=>TIPOS[e.tipo]||TIPOS.Otro;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const porHora=(a,b)=>(a.ev.hora||"99").localeCompare(b.ev.hora||"99");
+function textoRep(e){
+  if(!e.rep)return"";
+  const ds=SEM.filter(([n])=>e.rep.dias.includes(n)).map(([n])=>DIAS_L[n]);
+  let t=ds.length===7?"todos los días":"cada "+(ds.length>1?ds.slice(0,-1).join(", ")+" y "+ds.at(-1):ds[0]);
+  if(e.rep.hasta)t+=` hasta el ${deIso(e.rep.hasta).getDate()} de ${MESES[deIso(e.rep.hasta).getMonth()]}`;
+  return t;
+}
+
+// ---------- ocurrencias (eventos normales + los que se repiten)
+function instancias(desde,hasta){
+  const out=[];
+  for(const e of eventos){
+    if(!e.rep){if(e.fecha>=desde&&e.fecha<=hasta)out.push({ev:e,fecha:e.fecha,hecho:!!e.hecho});continue}
+    const ini=e.fecha>desde?e.fecha:desde;
+    const fin=e.rep.hasta&&e.rep.hasta<hasta?e.rep.hasta:hasta;
+    for(let d=deIso(ini);iso(d)<=fin;d.setDate(d.getDate()+1)){
+      const k=iso(d);
+      if(e.rep.dias.includes(d.getDay())&&!(e.excl||[]).includes(k))
+        out.push({ev:e,fecha:k,hecho:!!(e.hechos||{})[k]});
+    }
+  }
+  return out;
+}
 
 let vista=new Date(); vista.setDate(1);
 let sel=iso(hoy());
@@ -161,15 +204,15 @@ function dibujar(){
   const fin=new Date(vista.getFullYear(),vista.getMonth()+1,0);
   const semanas=Math.ceil(((fin-ini)/864e5+1)/7);
   cal.style.gridTemplateRows=`auto repeat(${semanas},1fr)`;
-  const porDia={}; eventos.forEach(e=>(porDia[e.fecha]??=[]).push(e));
+  const porDia={}; instancias(iso(ini),iso(masDias(ini,semanas*7-1))).forEach(i=>(porDia[i.fecha]??=[]).push(i));
   const h=iso(hoy());
-  for(let i=0;i<semanas*7;i++){
-    const d=new Date(ini); d.setDate(ini.getDate()+i); const k=iso(d);
-    const evs=(porDia[k]||[]).sort((a,b)=>(a.hecho-b.hecho)||(a.hora||"99").localeCompare(b.hora||"99"));
+  for(let n=0;n<semanas*7;n++){
+    const d=masDias(ini,n); const k=iso(d);
+    const evs=(porDia[k]||[]).sort((a,b)=>(a.hecho-b.hecho)||porHora(a,b));
     const div=document.createElement("div");
     div.className="dia"+(d.getMonth()!==vista.getMonth()?" fuera":"")+(k===h?" hoy":"")+(k===sel?" sel":"");
     div.innerHTML=`<span class="num">${d.getDate()}</span>`+
-      evs.slice(0,3).map(e=>`<div class="ev${e.hecho?" hecho":""}" style="background:${color(e)}" title="${esc(e.titulo)}">${e.hora?e.hora+" ":""}${esc(e.titulo)}</div>`).join("")+
+      evs.slice(0,3).map(i=>`<div class="ev${i.hecho?" hecho":""}" style="background:${color(i.ev)}" title="${esc(i.ev.titulo)}">${i.ev.rep?'<span class="rec">↻</span>':""}${i.ev.hora?i.ev.hora+" ":""}${esc(i.ev.titulo)}</div>`).join("")+
       (evs.length>3?`<div class="mas">+${evs.length-3} más</div>`:"");
     div.onclick=()=>{sel=k;if(d.getMonth()!==vista.getMonth()){vista=new Date(d.getFullYear(),d.getMonth(),1)}refrescar()};
     div.ondblclick=()=>abrir(null,k);
@@ -177,23 +220,25 @@ function dibujar(){
   }
 }
 
-function itemHTML(e,sub,clase=""){
-  return `<div class="item ${e.hecho?"hecho":""} ${clase}" data-id="${e.id}">
-    <button class="chk ${e.hecho?"on":""}" data-chk="${e.id}" title="Marcar como hecho">${e.hecho?"✓":""}</button>
+function itemHTML(i,sub,clase=""){
+  const e=i.ev;
+  return `<div class="item ${i.hecho?"hecho":""} ${clase}" data-id="${e.id}" data-f="${i.fecha}">
+    <button class="chk ${i.hecho?"on":""}" data-chk="${e.id}|${i.fecha}" title="Marcar como hecho">${i.hecho?"✓":""}</button>
     <span class="punto" style="background:${color(e)}"></span>
-    <div class="t"><b>${esc(e.titulo)}</b><small>${sub}</small></div></div>`;
+    <div class="t"><b>${e.rep?'<span class="rec">↻</span>':""}${esc(e.titulo)}</b><small>${sub}</small></div></div>`;
 }
 
 function listas(){
   $("tituloDia").textContent=bonita(sel).replace(/^./,c=>c.toUpperCase());
-  const delDia=eventos.filter(e=>e.fecha===sel).sort((a,b)=>(a.hora||"99").localeCompare(b.hora||"99"));
-  $("listaDia").innerHTML=delDia.length?delDia.map(e=>itemHTML(e,`${e.tipo}${e.hora?" · "+e.hora:""}`)).join("")
+  const delDia=instancias(sel,sel).sort(porHora);
+  $("listaDia").innerHTML=delDia.length?delDia.map(i=>itemHTML(i,`${i.ev.tipo}${i.ev.hora?" · "+i.ev.hora:""}${i.ev.rep?" · "+textoRep(i.ev):""}`)).join("")
     :`<div class="vacio">Nada este día.<br><button class="prim" onclick="abrir(null,sel)" style="margin-top:8px">+ Añadir</button></div>`;
-  const prox=eventos.filter(e=>!e.hecho&&diasHasta(e.fecha)>=-7&&diasHasta(e.fecha)<=7)
-    .sort((a,b)=>a.fecha.localeCompare(b.fecha)||(a.hora||"99").localeCompare(b.hora||"99"));
-  $("listaProx").innerHTML=prox.length?prox.map(e=>{const n=diasHasta(e.fecha);
+  const prox=instancias(iso(masDias(hoy(),-7)),iso(masDias(hoy(),7)))
+    .filter(i=>!i.hecho&&(!i.ev.rep||diasHasta(i.fecha)>=0))
+    .sort((a,b)=>a.fecha.localeCompare(b.fecha)||porHora(a,b));
+  $("listaProx").innerHTML=prox.length?prox.map(i=>{const n=diasHasta(i.fecha);
       const cl=n<0?"atrasado":n<=2?"urgente":"";
-      return itemHTML(e,`${restante(n)} · ${e.tipo} · ${bonita(e.fecha)}${e.hora?", "+e.hora:""}`,cl)}).join("")
+      return itemHTML(i,`${restante(n)} · ${i.ev.tipo} · ${bonita(i.fecha)}${i.ev.hora?", "+i.ev.hora:""}`,cl)}).join("")
     :`<div class="vacio">Semana libre 🎉</div>`;
 }
 
@@ -201,44 +246,82 @@ function refrescar(){dibujar();listas()}
 
 document.addEventListener("click",ev=>{
   const chk=ev.target.closest("[data-chk]");
-  if(chk){const e=eventos.find(x=>x.id===chk.dataset.chk);e.hecho=!e.hecho;guardar();refrescar();return}
+  if(chk){
+    const[id,f]=chk.dataset.chk.split("|"); const e=eventos.find(x=>x.id===id); if(!e)return;
+    if(e.rep){e.hechos??={}; if(e.hechos[f])delete e.hechos[f]; else e.hechos[f]=true}
+    else e.hecho=!e.hecho;
+    guardar();refrescar();return;
+  }
   const it=ev.target.closest(".item");
-  if(it){abrir(eventos.find(x=>x.id===it.dataset.id))}
+  if(it){abrir(eventos.find(x=>x.id===it.dataset.id),null,it.dataset.f)}
 });
 
 // ---------- formulario
-let editando=null, tipoSel="Entrega";
+let editando=null, ocurrencia=null, tipoSel="Entrega", diasSel=[];
 function pintarTipos(){
   $("fTipos").innerHTML=Object.entries(TIPOS).map(([t,c])=>
     `<button type="button" data-tipo="${t}" class="${t===tipoSel?"on":""}" style="${t===tipoSel?`background:${c};border-color:${c}`:`border-color:${c};color:${c}`}">${t}</button>`).join("");
 }
+function pintarDias(){
+  $("fDias").innerHTML=SEM.map(([n,l])=>`<button type="button" data-dia="${n}" class="${diasSel.includes(n)?"on":""}" title="${DIAS_L[n]}">${l}</button>`).join("");
+}
+function modoRep(){
+  const on=$("fRepite").checked;
+  $("fRepOpc").hidden=!on; $("lblFecha").textContent=on?"Empieza el":"Fecha";
+}
 $("fTipos").onclick=ev=>{const b=ev.target.closest("[data-tipo]");if(b){tipoSel=b.dataset.tipo;pintarTipos()}};
-function abrir(e,fecha){
-  editando=e||null;
-  $("dlgTitulo").textContent=e?"Editar":"Nuevo";
+$("fDias").onclick=ev=>{const b=ev.target.closest("[data-dia]");if(!b)return;const n=Number(b.dataset.dia);
+  diasSel=diasSel.includes(n)?diasSel.filter(x=>x!==n):[...diasSel,n];pintarDias()};
+$("fRepite").onchange=()=>{
+  if($("fRepite").checked){
+    if(!diasSel.length&&$("fFecha").value)diasSel=[deIso($("fFecha").value).getDay()];
+    if($("fAntelacion").value==="7")$("fAntelacion").value="0"; // para lo semanal, avisar el mismo día
+    pintarDias();
+  }
+  modoRep();
+};
+function abrir(e,fecha,ocu){
+  editando=e||null; ocurrencia=e&&e.rep?ocu:null;
+  $("dlgTitulo").textContent=e?(e.rep?"Editar (se repite)":"Editar"):"Nuevo";
   $("fTitulo").value=e?.titulo||"";
   tipoSel=e?.tipo||"Entrega"; pintarTipos();
   $("fFecha").value=e?.fecha||fecha||sel;
   $("fHora").value=e?.hora||"";
   $("fAntelacion").value=String(e?.antelacion??7);
   $("fNotas").value=e?.notas||"";
+  $("fRepite").checked=!!e?.rep;
+  diasSel=e?.rep?[...e.rep.dias]:[]; $("fHasta").value=e?.rep?.hasta||"";
+  pintarDias(); modoRep();
   $("borrar").style.visibility=e?"visible":"hidden";
+  $("borrar").textContent=e?.rep?"Eliminar todos":"Eliminar";
+  $("borrarDia").hidden=!ocurrencia;
+  if(ocurrencia)$("borrarDia").textContent=`Quitar solo el ${deIso(ocurrencia).getDate()}/${deIso(ocurrencia).getMonth()+1}`;
   $("dlg").showModal(); $("fTitulo").focus();
 }
 $("form").onsubmit=ev=>{
-  const t=$("fTitulo").value.trim(), f=$("fFecha").value;
+  const t=$("fTitulo").value.trim(), f=$("fFecha").value, rep=$("fRepite").checked, hasta=$("fHasta").value;
   if(!t||!f){ev.preventDefault();return}
+  if(rep&&!diasSel.length){ev.preventDefault();alert("Elige al menos un día de la semana.");return}
+  if(rep&&hasta&&hasta<f){ev.preventDefault();alert("La fecha «Hasta» tiene que ser posterior al inicio.");return}
   const datos={titulo:t,tipo:tipoSel,fecha:f,hora:$("fHora").value,antelacion:Number($("fAntelacion").value),notas:$("fNotas").value.trim()};
+  if(rep)datos.rep={dias:[...diasSel].sort(),hasta};
   if(editando){
-    if(editando.fecha!==f){const av=cargar(K_AV,{});delete av[editando.id];guardarK(K_AV,av)}
     Object.assign(editando,datos);
+    if(!rep){delete editando.rep;delete editando.hechos;delete editando.excl}
   } else eventos.push({id:crypto.randomUUID?crypto.randomUUID():Date.now()+""+Math.random(),hecho:false,...datos});
-  guardar(); sel=f; const d=deIso(f); vista=new Date(d.getFullYear(),d.getMonth(),1);
+  guardar(); sel=ocurrencia||f; const d=deIso(sel); vista=new Date(d.getFullYear(),d.getMonth(),1);
   refrescar(); setTimeout(comprobarAvisos,300);
 };
 $("cancelar").onclick=()=>$("dlg").close();
 $("borrar").onclick=()=>{
-  if(editando&&confirm(`¿Eliminar «${editando.titulo}»?`)){eventos=eventos.filter(e=>e!==editando);guardar();$("dlg").close();refrescar()}
+  if(!editando)return;
+  const msg=editando.rep?`¿Eliminar «${editando.titulo}» de todas las semanas?`:`¿Eliminar «${editando.titulo}»?`;
+  if(confirm(msg)){eventos=eventos.filter(e=>e!==editando);guardar();$("dlg").close();refrescar()}
+};
+$("borrarDia").onclick=()=>{
+  if(!editando||!ocurrencia)return;
+  (editando.excl??=[]).push(ocurrencia); if(editando.hechos)delete editando.hechos[ocurrencia];
+  guardar();$("dlg").close();refrescar();
 };
 
 // ---------- navegación
@@ -257,7 +340,7 @@ function estadoNoti(){
   const b=$("notiBtn");
   if(!("Notification" in window)){b.style.display="none";return}
   if(Notification.permission==="granted"){b.textContent="🔔 Avisos activados";b.disabled=true}
-  else if(Notification.permission==="denied"){b.textContent="🔕 Avisos bloqueados";b.title="Permite las notificaciones para este archivo en la configuración del navegador"}
+  else if(Notification.permission==="denied"){b.textContent="🔕 Avisos bloqueados";b.title="Permite las notificaciones para esta página en la configuración del navegador"}
 }
 $("notiBtn").onclick=async()=>{
   if(Notification.permission==="denied"){alert("El navegador tiene bloqueadas las notificaciones. Pulsa el candado/icono a la izquierda de la barra de direcciones y permítelas.");return}
@@ -266,22 +349,22 @@ $("notiBtn").onclick=async()=>{
 
 function comprobarAvisos(forzar=false){
   const h=iso(hoy()), av=cargar(K_AV,{});
-  const pend=eventos.filter(e=>{const n=diasHasta(e.fecha);return!e.hecho&&n>=0&&n<=(e.antelacion??7)})
-    .sort((a,b)=>a.fecha.localeCompare(b.fecha));
-  // banner dentro de la app (siempre que haya algo esta semana)
+  const pend=instancias(h,iso(masDias(hoy(),7)))
+    .filter(i=>!i.hecho&&diasHasta(i.fecha)<=(i.ev.antelacion??7))
+    .sort((a,b)=>a.fecha.localeCompare(b.fecha)||porHora(a,b));
+  const clave=i=>i.ev.id+"|"+i.fecha;
   if(pend.length){
     $("avisoTxt").innerHTML=`⏰ <b>${pend.length===1?"Tienes 1 cosa":"Tienes "+pend.length+" cosas"} en los próximos días:</b> `+
-      pend.slice(0,4).map(e=>`${esc(e.titulo)} (${restante(diasHasta(e.fecha)).toLowerCase()})`).join(" · ")+(pend.length>4?" …":"");
+      pend.slice(0,4).map(i=>`${esc(i.ev.titulo)} (${restante(diasHasta(i.fecha)).toLowerCase()})`).join(" · ")+(pend.length>4?" …":"");
     if(sessionStorage.getItem("avisoCerrado")!==h)$("aviso").classList.add("on");
   } else $("aviso").classList.remove("on");
-  // notificación del sistema, una vez al día por cada cosa
-  const nuevos=pend.filter(e=>forzar||av[e.id]!==h);
+  const nuevos=pend.filter(i=>forzar||av[clave(i)]!==h);
   if(!nuevos.length||!("Notification" in window)||Notification.permission!=="granted")return;
   const lanzar=(t,b)=>{try{const n=new Notification(t,{body:b,requireInteraction:true,tag:"miagenda-"+t});n.onclick=()=>{window.focus();n.close()}}catch{}};
-  if(nuevos.length<=3) nuevos.forEach(e=>lanzar(`${e.tipo}: ${e.titulo}`,`${restante(diasHasta(e.fecha))} (${bonita(e.fecha)}${e.hora?", "+e.hora:""})`));
-  else lanzar(`Tienes ${nuevos.length} cosas esta semana`,nuevos.slice(0,6).map(e=>`• ${e.titulo}: ${restante(diasHasta(e.fecha)).toLowerCase()}`).join("\n"));
-  nuevos.forEach(e=>av[e.id]=h);
-  const ids=new Set(eventos.map(e=>e.id)); Object.keys(av).forEach(k=>{if(!ids.has(k))delete av[k]});
+  if(nuevos.length<=3) nuevos.forEach(i=>lanzar(`${i.ev.tipo}: ${i.ev.titulo}`,`${restante(diasHasta(i.fecha))} (${bonita(i.fecha)}${i.ev.hora?", "+i.ev.hora:""})`));
+  else lanzar(`Tienes ${nuevos.length} cosas esta semana`,nuevos.slice(0,6).map(i=>`• ${i.ev.titulo}: ${restante(diasHasta(i.fecha)).toLowerCase()}`).join("\n"));
+  nuevos.forEach(i=>av[clave(i)]=h);
+  Object.keys(av).forEach(k=>{if(av[k]!==h)delete av[k]});
   guardarK(K_AV,av);
 }
 $("avisoX").onclick=()=>{$("aviso").classList.remove("on");sessionStorage.setItem("avisoCerrado",iso(hoy()))};
