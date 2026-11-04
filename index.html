@@ -114,7 +114,7 @@ body.v-tareas #tareas{display:block}
 .t-prog .barra{height:8px;background:var(--borde);border-radius:4px;overflow:hidden}
 .t-prog .barra i{display:block;height:100%;background:#30a46c;border-radius:4px;transition:width .3s}
 .t-prog small{color:var(--suave)}
-.t-wrap h2{font-size:16px;margin:8px 0 -4px;display:flex;align-items:center;justify-content:space-between}
+.t-wrap h2{font-size:16px;margin:10px 0 -4px;display:flex;align-items:center;justify-content:space-between}
 .t-wrap h2 button{font-size:12px;padding:3px 10px;font-weight:400}
 .t-ed{border:0;background:none;color:var(--suave);padding:4px 8px;font-size:15px}
 .t-item b{white-space:normal!important}
@@ -155,26 +155,18 @@ body.v-tareas #tareas{display:block}
 <section id="tareas"><div class="t-wrap">
   <form class="t-nueva" id="tForm">
     <div class="t-fila"><input id="tTexto" placeholder="Añadir tarea… (ej. Poner lavadora)" maxlength="140" autocomplete="off"><button class="prim">Añadir</button></div>
-    <div class="t-opc">
-      <span>Repetir:</span><div class="dsem" id="tDias"></div>
-      <label id="tFechaWrap">o para el día <input type="date" id="tFecha"></label>
-    </div>
   </form>
   <div class="t-prog" id="tProg"></div>
-  <h2>Hoy</h2><div class="lista" id="tHoy"></div>
-  <div id="tProxBloque"><h2>Más adelante</h2><div class="lista" id="tProx"></div></div>
-  <div id="tRutBloque"><h2>Tareas que se repiten</h2><div class="lista" id="tRut"></div></div>
-  <div id="tHechasBloque"><h2>Hechas <button type="button" id="tLimpiar">Borrar hechas</button></h2><div class="lista" id="tHechas"></div></div>
+  <div class="lista" id="tPend"></div>
+  <div id="tHechasBloque"><h2>Completadas <button type="button" id="tLimpiar">Quitar completadas</button></h2><div class="lista" id="tHechas"></div></div>
 </div></section>
 
 <dialog id="dlgT">
   <form method="dialog" id="teForm">
-    <h3>Editar tarea</h3>
+    <h3>Modificar tarea</h3>
     <label>Tarea<input id="teTexto" required maxlength="140"></label>
-    <div class="dias-sel">Repetir (si no marcas ningún día, es de una sola vez):<div class="dsem" id="teDias"></div></div>
-    <label id="teFechaWrap">Para el día (opcional)<input type="date" id="teFecha"></label>
     <div class="acciones">
-      <button type="button" class="peligro" id="teBorrar">Eliminar</button>
+      <button type="button" class="peligro" id="teBorrar">Quitar</button>
       <div class="esp"></div>
       <button type="button" id="teCancelar">Cancelar</button>
       <button class="prim" value="ok">Guardar</button>
@@ -489,104 +481,58 @@ let tareas=[];
 const guardarT=()=>window.nube?.guardar(tareas,"tareas");
 window.setTareas=arr=>{tareas=arr;dibujarTareas()};
 const nuevoId=()=>crypto.randomUUID?crypto.randomUUID():Date.now()+""+Math.random();
-function diasTxt(d){
-  if(d.length===7)return"Todos los días";
-  if(d.length===5&&[1,2,3,4,5].every(x=>d.includes(x)))return"De lunes a viernes";
-  if(d.length===2&&d.includes(0)&&d.includes(6))return"Fines de semana";
-  return SEM.filter(([n])=>d.includes(n)).map(([n])=>DIAS[(n+6)%7]).join(", ");
-}
-const esRutina=t=>!!(t.dias&&t.dias.length);
-function hechaHoy(t){return esRutina(t)?!!(t.hechos||{})[iso(hoy())]:!!t.hecha}
-function tItem(t,sub,{cl="",chk=true}={}){
-  const done=chk&&hechaHoy(t);
-  return `<div class="item t-item ${done?"hecho":""} ${cl}" data-tid="${t.id}">
-    <button class="chk ${done?"on":""} ${chk?"":"vacio"}" data-tchk="${t.id}" title="Marcar como hecha">${done?"✓":""}</button>
-    <div class="t"><b>${esc(t.texto)}</b>${sub?`<small>${sub}</small>`:""}</div>
-    <button class="t-ed" data-ted="${t.id}" title="Editar">✎</button></div>`;
+function tItem(t){
+  return `<div class="item t-item ${t.hecha?"hecho":""}" data-tid="${t.id}">
+    <button class="chk ${t.hecha?"on":""}" data-tchk="${t.id}" title="${t.hecha?"Marcar como pendiente":"Marcar como completada"}">${t.hecha?"✓":""}</button>
+    <div class="t"><b>${esc(t.texto)}</b></div>
+    <button class="t-ed" data-ted="${t.id}" title="Modificar">✎</button>
+    <button class="t-ed" data-tdel="${t.id}" title="Quitar">🗑</button></div>`;
 }
 function dibujarTareas(){
-  if(!$("tHoy"))return;
-  const h=iso(hoy()), dHoy=hoy().getDay();
-  const enHoy=[], prox=[], rut=[], hechas=[];
-  for(const t of tareas){
-    if(esRutina(t)){rut.push(t);if(t.dias.includes(dHoy))enHoy.push(t);continue}
-    if(t.hecha){(t.hechaEl===h?enHoy:hechas).push(t);continue}
-    (!t.fecha||t.fecha<=h?enHoy:prox).push(t);
-  }
-  const clave=t=>[hechaHoy(t)?1:0, t.fecha&&t.fecha<h&&!esRutina(t)?0:1, t.creada||0];
-  enHoy.sort((a,b)=>{const x=clave(a),y=clave(b);return x[0]-y[0]||x[1]-y[1]||x[2]-y[2]});
-  const hechasHoy=enHoy.filter(hechaHoy).length;
-  $("tHoy").innerHTML=enHoy.length?enHoy.map(t=>{
-      let sub="",cl="";
-      if(esRutina(t))sub="↻ "+diasTxt(t.dias);
-      else if(t.fecha&&t.fecha<h&&!t.hecha){sub=`Atrasada · era para el ${bonita(t.fecha)}`;cl="atrasada"}
-      else if(t.fecha===h)sub="Para hoy";
-      return tItem(t,sub,{cl});
-    }).join(""):`<div class="vacio">Nada para hoy. Escribe arriba tu primera tarea ✍️</div>`;
-  $("tProg").innerHTML=enHoy.length?`<div class="barra"><i style="width:${Math.round(hechasHoy/enHoy.length*100)}%"></i></div><small>${hechasHoy===enHoy.length?"¡Todo hecho por hoy! 🎉":`${hechasHoy} de ${enHoy.length} hechas hoy`}</small>`:"";
-  prox.sort((a,b)=>a.fecha.localeCompare(b.fecha));
-  $("tProxBloque").hidden=!prox.length;
-  $("tProx").innerHTML=prox.map(t=>tItem(t,`Para el ${bonita(t.fecha)} · ${restante(diasHasta(t.fecha)).toLowerCase()}`)).join("");
-  rut.sort((a,b)=>(a.creada||0)-(b.creada||0));
-  $("tRutBloque").hidden=!rut.length;
-  $("tRut").innerHTML=rut.map(t=>tItem(t,"↻ "+diasTxt(t.dias)+(t.dias.includes(dHoy)?" · hoy toca":""),{cl:"rutina",chk:false})).join("");
-  hechas.sort((a,b)=>(b.hechaEl||"").localeCompare(a.hechaEl||""));
+  if(!$("tPend"))return;
+  const pend=tareas.filter(t=>!t.hecha).sort((a,b)=>(a.creada||0)-(b.creada||0));
+  const hechas=tareas.filter(t=>t.hecha).sort((a,b)=>(b.hechaTs||0)-(a.hechaTs||0));
+  $("tPend").innerHTML=pend.length?pend.map(tItem).join(""):`<div class="vacio">${tareas.length?"¡Todo completado! 🎉":"No tienes tareas. Escribe arriba la primera ✍️"}</div>`;
   $("tHechasBloque").hidden=!hechas.length;
-  $("tHechas").innerHTML=hechas.slice(0,30).map(t=>tItem(t,t.hechaEl?`Hecha el ${bonita(t.hechaEl)}`:"Hecha")).join("");
-  const pend=enHoy.length-hechasHoy; $("tBadge").textContent=pend?String(pend):"";
+  $("tHechas").innerHTML=hechas.map(tItem).join("");
+  $("tProg").innerHTML=tareas.length?`<div class="barra"><i style="width:${Math.round(hechas.length/tareas.length*100)}%"></i></div><small>${hechas.length} de ${tareas.length} completadas</small>`:"";
+  $("tBadge").textContent=pend.length?String(pend.length):"";
 }
 function toggleT(id){
-  const t=tareas.find(x=>x.id===id); if(!t)return; const h=iso(hoy());
-  if(esRutina(t)){
-    t.hechos??={}; if(t.hechos[h])delete t.hechos[h]; else t.hechos[h]=true;
-    const lim=iso(masDias(hoy(),-60)); for(const k of Object.keys(t.hechos))if(k<lim)delete t.hechos[k];
-  } else {t.hecha=!t.hecha; if(t.hecha)t.hechaEl=h; else delete t.hechaEl}
+  const t=tareas.find(x=>x.id===id); if(!t)return;
+  t.hecha=!t.hecha; if(t.hecha)t.hechaTs=Date.now(); else delete t.hechaTs;
   guardarT(); dibujarTareas();
 }
-document.addEventListener("click",ev=>{
-  const c=ev.target.closest("[data-tchk]"); if(c){if(!c.classList.contains("vacio"))toggleT(c.dataset.tchk);return}
-  const e=ev.target.closest("[data-ted]"); if(e){abrirT(e.dataset.ted);return}
-  const it=ev.target.closest(".t-item"); if(it&&!it.classList.contains("rutina"))toggleT(it.dataset.tid);
-  else if(it)abrirT(it.dataset.tid);
-});
-// selector de días reutilizable
-function selectorDias(cont,get,set,alCambiar){
-  const pintar=()=>{const d=get();cont.innerHTML=SEM.map(([n,l])=>`<button type="button" data-d="${n}" class="${d.includes(n)?"on":""}" title="${DIAS_L[n]}">${l}</button>`).join("")+
-    `<button type="button" class="t-todos ${d.length===7?"on":""}" data-d="all">Todos</button>`;alCambiar?.()};
-  cont.onclick=ev=>{const b=ev.target.closest("[data-d]");if(!b)return;let d=get();
-    if(b.dataset.d==="all")d=d.length===7?[]:[1,2,3,4,5,6,0];else{const n=Number(b.dataset.d);d=d.includes(n)?d.filter(x=>x!==n):[...d,n]}
-    set(d);pintar()};
-  return pintar;
+function quitarT(id){
+  const t=tareas.find(x=>x.id===id);
+  if(t&&confirm(`¿Quitar la tarea «${t.texto}»?`)){tareas=tareas.filter(x=>x.id!==id);guardarT();dibujarTareas();return true}
+  return false;
 }
-let tDiasSel=[];
-const pintarTDias=selectorDias($("tDias"),()=>tDiasSel,d=>tDiasSel=d,()=>$("tFechaWrap").hidden=tDiasSel.length>0);
-pintarTDias();
+document.addEventListener("click",ev=>{
+  const c=ev.target.closest("[data-tchk]"); if(c){toggleT(c.dataset.tchk);return}
+  const e=ev.target.closest("[data-ted]"); if(e){abrirT(e.dataset.ted);return}
+  const d=ev.target.closest("[data-tdel]"); if(d){quitarT(d.dataset.tdel);return}
+  const it=ev.target.closest(".t-item"); if(it)toggleT(it.dataset.tid);
+});
 $("tForm").onsubmit=ev=>{
   ev.preventDefault(); const txt=$("tTexto").value.trim(); if(!txt){$("tTexto").focus();return}
-  const t={id:nuevoId(),texto:txt,dias:[...tDiasSel].sort(),creada:Date.now()};
-  if(!t.dias.length){t.hecha=false;if($("tFecha").value)t.fecha=$("tFecha").value}
-  tareas.push(t); guardarT();
-  $("tTexto").value=""; $("tFecha").value=""; tDiasSel=[]; pintarTDias(); dibujarTareas(); $("tTexto").focus();
+  tareas.push({id:nuevoId(),texto:txt,hecha:false,creada:Date.now()}); guardarT();
+  $("tTexto").value=""; dibujarTareas(); $("tTexto").focus();
 };
-let tEditId=null, teDias=[];
-const pintarTeDias=selectorDias($("teDias"),()=>teDias,d=>teDias=d,()=>$("teFechaWrap").hidden=teDias.length>0);
+let tEditId=null;
 function abrirT(id){
   const t=tareas.find(x=>x.id===id); if(!t)return; tEditId=id;
-  $("teTexto").value=t.texto; teDias=[...(t.dias||[])]; $("teFecha").value=t.fecha||""; pintarTeDias();
-  $("dlgT").showModal(); $("teTexto").focus();
+  $("teTexto").value=t.texto; $("dlgT").showModal(); $("teTexto").select();
 }
 $("teForm").onsubmit=ev=>{
   const t=tareas.find(x=>x.id===tEditId); const txt=$("teTexto").value.trim();
-  if(!t||!txt){if(!txt)ev.preventDefault();return}
-  t.texto=txt; t.dias=[...teDias].sort();
-  if(t.dias.length){delete t.fecha;delete t.hecha;delete t.hechaEl}
-  else{delete t.hechos; t.hecha=!!t.hecha; if($("teFecha").value)t.fecha=$("teFecha").value; else delete t.fecha}
-  guardarT(); dibujarTareas();
+  if(!txt){ev.preventDefault();return} if(!t)return;
+  t.texto=txt; guardarT(); dibujarTareas();
 };
 $("teCancelar").onclick=()=>$("dlgT").close();
-$("teBorrar").onclick=()=>{const t=tareas.find(x=>x.id===tEditId);if(t&&confirm(`¿Eliminar la tarea «${t.texto}»?`)){tareas=tareas.filter(x=>x.id!==tEditId);guardarT();$("dlgT").close();dibujarTareas()}};
-$("tLimpiar").onclick=()=>{const h=iso(hoy());const n=tareas.filter(t=>!esRutina(t)&&t.hecha&&t.hechaEl!==h).length;
-  if(n&&confirm(`¿Borrar ${n===1?"la tarea hecha":"las "+n+" tareas hechas"}?`)){tareas=tareas.filter(t=>!(!esRutina(t)&&t.hecha&&t.hechaEl!==h));guardarT();dibujarTareas()}};
+$("teBorrar").onclick=()=>{if(quitarT(tEditId))$("dlgT").close()};
+$("tLimpiar").onclick=()=>{const n=tareas.filter(t=>t.hecha).length;
+  if(n&&confirm(`¿Quitar ${n===1?"la tarea completada":"las "+n+" tareas completadas"}?`)){tareas=tareas.filter(t=>!t.hecha);guardarT();dibujarTareas()}};
 
 // ---------- pestañas
 let vistaAct=(()=>{try{return localStorage.getItem("miAgenda.vista")||"cal"}catch{return"cal"}})();
