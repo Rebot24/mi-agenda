@@ -74,7 +74,7 @@ textarea{resize:vertical;min-height:70px}
 .rep{border:1px solid var(--borde);border-radius:8px;padding:8px 10px;display:grid;gap:8px}
 .chkl{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--txt);cursor:pointer}
 .chkl input{width:16px;height:16px;margin:0}
-.dsem{display:flex;gap:5px}
+.dsem{display:flex;gap:5px;flex-wrap:wrap}
 .dsem button{width:36px;height:34px;padding:0;border-radius:50%;font-weight:600;font-size:13px}
 .dsem button.on{background:var(--acento);border-color:var(--acento);color:#fff}
 .dias-sel{display:grid;gap:4px;font-size:12px;color:var(--suave)}
@@ -92,20 +92,49 @@ textarea{resize:vertical;min-height:70px}
 #cuentaBtn{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#1f2328;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:60;box-shadow:0 6px 24px rgba(0,0,0,.25)}
 #toast[hidden]{display:none}
-@media (max-width:600px){header h1{min-width:0;font-size:19px}header{padding:12px}main{padding:0 12px 12px}#cuentaBtn{max-width:150px}}
+@media (max-width:600px){header h1{min-width:0;font-size:19px}header{padding:12px}main{padding:0 12px 12px}#tareas{padding:0 12px 20px}.dsem button{width:32px;height:32px}.dsem .t-todos{padding:0 8px}#cuentaBtn{max-width:150px}}
+.tabs{display:flex;background:var(--card);border:1px solid var(--borde);border-radius:10px;padding:3px;gap:2px}
+.tabs button{border:0;background:none;border-radius:7px;padding:6px 12px;font-weight:600;color:var(--suave)}
+.tabs button.on{background:var(--acento);color:#fff}
+.badge{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:var(--rojo);color:#fff;font-size:11px;line-height:18px;text-align:center;margin-left:4px}
+.badge:empty{display:none}
+.tabs button.on .badge{background:#fff;color:var(--acento)}
+#tareas{display:none;flex:1;padding:0 18px 24px}
+body.v-tareas main,body.v-tareas .calctl{display:none!important}
+body.v-tareas #tareas{display:block}
+.t-wrap{max-width:720px;margin:0 auto;display:grid;gap:12px}
+.t-nueva{background:var(--card);border:1px solid var(--borde);border-radius:12px;padding:12px;display:grid;gap:10px}
+.t-fila{display:flex;gap:8px}
+.t-fila input{flex:1;min-width:0;font-size:15px}
+.t-opc{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--suave)}
+.t-opc label{display:flex;align-items:center;gap:6px}
+.t-opc input[type=date]{padding:5px 8px}
+.dsem .t-todos{width:auto;border-radius:17px;padding:0 10px;font-size:12px}
+.t-prog{display:grid;gap:6px}
+.t-prog .barra{height:8px;background:var(--borde);border-radius:4px;overflow:hidden}
+.t-prog .barra i{display:block;height:100%;background:#30a46c;border-radius:4px;transition:width .3s}
+.t-prog small{color:var(--suave)}
+.t-wrap h2{font-size:16px;margin:8px 0 -4px;display:flex;align-items:center;justify-content:space-between}
+.t-wrap h2 button{font-size:12px;padding:3px 10px;font-weight:400}
+.t-ed{border:0;background:none;color:var(--suave);padding:4px 8px;font-size:15px}
+.t-item b{white-space:normal!important}
+.item.atrasada small{color:var(--rojo);font-weight:600}
+.item.rutina{cursor:default}
+.chk.vacio{visibility:hidden}
 @media (max-width:900px){body{height:auto;min-height:100vh}main{flex-direction:column}aside{width:auto}#cal{min-height:460px}#listaDia,#listaProx{max-height:none;flex:none}}
 </style>
 </head>
 <body>
 <header>
-  <button class="nav" id="prev" title="Mes anterior">‹</button>
-  <button class="nav" id="next" title="Mes siguiente">›</button>
-  <h1 id="mes"></h1>
-  <button id="hoyBtn">Hoy</button>
+  <nav class="tabs"><button data-vista="cal" class="on">📅 Calendario</button><button data-vista="tareas">✅ Tareas<span class="badge" id="tBadge"></span></button></nav>
+  <button class="nav calctl" id="prev" title="Mes anterior">‹</button>
+  <button class="nav calctl" id="next" title="Mes siguiente">›</button>
+  <h1 id="mes" class="calctl"></h1>
+  <button id="hoyBtn" class="calctl">Hoy</button>
   <div class="esp"></div>
   <button id="notiBtn">🔔 Activar avisos</button>
   <button id="cuentaBtn" hidden title="Tu cuenta"></button>
-  <button class="prim" id="nuevoBtn">+ Nuevo</button>
+  <button class="prim calctl" id="nuevoBtn">+ Nuevo</button>
 </header>
 <div id="aviso"><span id="avisoTxt"></span><button id="avisoX">Vale</button></div>
 <main>
@@ -122,6 +151,36 @@ textarea{resize:vertical;min-height:70px}
     </div>
   </aside>
 </main>
+
+<section id="tareas"><div class="t-wrap">
+  <form class="t-nueva" id="tForm">
+    <div class="t-fila"><input id="tTexto" placeholder="Añadir tarea… (ej. Poner lavadora)" maxlength="140" autocomplete="off"><button class="prim">Añadir</button></div>
+    <div class="t-opc">
+      <span>Repetir:</span><div class="dsem" id="tDias"></div>
+      <label id="tFechaWrap">o para el día <input type="date" id="tFecha"></label>
+    </div>
+  </form>
+  <div class="t-prog" id="tProg"></div>
+  <h2>Hoy</h2><div class="lista" id="tHoy"></div>
+  <div id="tProxBloque"><h2>Más adelante</h2><div class="lista" id="tProx"></div></div>
+  <div id="tRutBloque"><h2>Tareas que se repiten</h2><div class="lista" id="tRut"></div></div>
+  <div id="tHechasBloque"><h2>Hechas <button type="button" id="tLimpiar">Borrar hechas</button></h2><div class="lista" id="tHechas"></div></div>
+</div></section>
+
+<dialog id="dlgT">
+  <form method="dialog" id="teForm">
+    <h3>Editar tarea</h3>
+    <label>Tarea<input id="teTexto" required maxlength="140"></label>
+    <div class="dias-sel">Repetir (si no marcas ningún día, es de una sola vez):<div class="dsem" id="teDias"></div></div>
+    <label id="teFechaWrap">Para el día (opcional)<input type="date" id="teFecha"></label>
+    <div class="acciones">
+      <button type="button" class="peligro" id="teBorrar">Eliminar</button>
+      <div class="esp"></div>
+      <button type="button" id="teCancelar">Cancelar</button>
+      <button class="prim" value="ok">Guardar</button>
+    </div>
+  </form>
+</dialog>
 
 <div class="login" id="login">
   <div id="loginCargando">Cargando…</div>
@@ -274,7 +333,7 @@ function listas(){
     :`<div class="vacio">Semana libre 🎉</div>`;
 }
 
-function refrescar(){dibujar();listas()}
+function refrescar(){dibujar();listas();dibujarTareas()}
 
 document.addEventListener("click",ev=>{
   const chk=ev.target.closest("[data-chk]");
@@ -285,7 +344,7 @@ document.addEventListener("click",ev=>{
     guardar();refrescar();return;
   }
   const it=ev.target.closest(".item");
-  if(it){abrir(eventos.find(x=>x.id===it.dataset.id),null,it.dataset.f)}
+  if(it&&it.dataset.id){abrir(eventos.find(x=>x.id===it.dataset.id),null,it.dataset.f)}
 });
 
 // ---------- formulario
@@ -365,7 +424,8 @@ $("next").onclick=()=>{vista.setMonth(vista.getMonth()+1);refrescar()};
 $("hoyBtn").onclick=()=>{sel=iso(hoy());vista=new Date();vista.setDate(1);refrescar()};
 $("nuevoBtn").onclick=()=>abrir(null,sel);
 document.addEventListener("keydown",e=>{
-  if($("dlg").open)return;
+  if($("dlg").open||$("dlgT").open||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
+  if(vistaAct==="tareas"){if(e.key==="n"){e.preventDefault();$("tTexto").focus()}return}
   if(e.key==="PageUp")$("prev").click(); if(e.key==="PageDown")$("next").click();
   if(e.key==="n"&&!e.ctrlKey&&!e.metaKey)abrir(null,sel);
 });
@@ -407,18 +467,137 @@ $("avisoX").onclick=()=>{$("aviso").classList.remove("on");sessionStorage.setIte
 // ---------- copia de seguridad
 $("exportar").onclick=()=>{
   const a=document.createElement("a");
-  a.href=URL.createObjectURL(new Blob([JSON.stringify(eventos,null,2)],{type:"application/json"}));
+  a.href=URL.createObjectURL(new Blob([JSON.stringify({eventos,tareas},null,2)],{type:"application/json"}));
   a.download=`mi-agenda-copia-${iso(hoy())}.json`; a.click(); URL.revokeObjectURL(a.href);
 };
 $("importar").onclick=()=>$("fichero").click();
 $("fichero").onchange=async ev=>{
   const f=ev.target.files[0]; if(!f)return;
-  try{const datos=JSON.parse(await f.text()); if(!Array.isArray(datos))throw 0;
-    const ids=new Set(eventos.map(e=>e.id)); const nuevos=datos.filter(e=>e&&e.id&&e.fecha&&!ids.has(e.id));
-    eventos.push(...nuevos); guardar(); refrescar(); toast(`Restaurados ${nuevos.length} elementos.`);
+  try{const datos=JSON.parse(await f.text());
+    const evs=Array.isArray(datos)?datos:datos?.eventos, tas=Array.isArray(datos)?[]:(datos?.tareas||[]);
+    if(!Array.isArray(evs))throw 0;
+    const ids=new Set(eventos.map(e=>e.id)); const nuevos=evs.filter(e=>e&&e.id&&e.fecha&&!ids.has(e.id));
+    const idsT=new Set(tareas.map(t=>t.id)); const nuevasT=tas.filter(t=>t&&t.id&&t.texto&&!idsT.has(t.id));
+    eventos.push(...nuevos); tareas.push(...nuevasT); guardar(); guardarT(); refrescar();
+    toast(`Restaurados ${nuevos.length} del calendario y ${nuevasT.length} tareas.`);
   }catch{alert("Ese archivo no es una copia válida de Mi Agenda.")}
   ev.target.value="";
 };
+
+// ---------- tareas (checklist)
+let tareas=[];
+const guardarT=()=>window.nube?.guardar(tareas,"tareas");
+window.setTareas=arr=>{tareas=arr;dibujarTareas()};
+const nuevoId=()=>crypto.randomUUID?crypto.randomUUID():Date.now()+""+Math.random();
+function diasTxt(d){
+  if(d.length===7)return"Todos los días";
+  if(d.length===5&&[1,2,3,4,5].every(x=>d.includes(x)))return"De lunes a viernes";
+  if(d.length===2&&d.includes(0)&&d.includes(6))return"Fines de semana";
+  return SEM.filter(([n])=>d.includes(n)).map(([n])=>DIAS[(n+6)%7]).join(", ");
+}
+const esRutina=t=>!!(t.dias&&t.dias.length);
+function hechaHoy(t){return esRutina(t)?!!(t.hechos||{})[iso(hoy())]:!!t.hecha}
+function tItem(t,sub,{cl="",chk=true}={}){
+  const done=chk&&hechaHoy(t);
+  return `<div class="item t-item ${done?"hecho":""} ${cl}" data-tid="${t.id}">
+    <button class="chk ${done?"on":""} ${chk?"":"vacio"}" data-tchk="${t.id}" title="Marcar como hecha">${done?"✓":""}</button>
+    <div class="t"><b>${esc(t.texto)}</b>${sub?`<small>${sub}</small>`:""}</div>
+    <button class="t-ed" data-ted="${t.id}" title="Editar">✎</button></div>`;
+}
+function dibujarTareas(){
+  if(!$("tHoy"))return;
+  const h=iso(hoy()), dHoy=hoy().getDay();
+  const enHoy=[], prox=[], rut=[], hechas=[];
+  for(const t of tareas){
+    if(esRutina(t)){rut.push(t);if(t.dias.includes(dHoy))enHoy.push(t);continue}
+    if(t.hecha){(t.hechaEl===h?enHoy:hechas).push(t);continue}
+    (!t.fecha||t.fecha<=h?enHoy:prox).push(t);
+  }
+  const clave=t=>[hechaHoy(t)?1:0, t.fecha&&t.fecha<h&&!esRutina(t)?0:1, t.creada||0];
+  enHoy.sort((a,b)=>{const x=clave(a),y=clave(b);return x[0]-y[0]||x[1]-y[1]||x[2]-y[2]});
+  const hechasHoy=enHoy.filter(hechaHoy).length;
+  $("tHoy").innerHTML=enHoy.length?enHoy.map(t=>{
+      let sub="",cl="";
+      if(esRutina(t))sub="↻ "+diasTxt(t.dias);
+      else if(t.fecha&&t.fecha<h&&!t.hecha){sub=`Atrasada · era para el ${bonita(t.fecha)}`;cl="atrasada"}
+      else if(t.fecha===h)sub="Para hoy";
+      return tItem(t,sub,{cl});
+    }).join(""):`<div class="vacio">Nada para hoy. Escribe arriba tu primera tarea ✍️</div>`;
+  $("tProg").innerHTML=enHoy.length?`<div class="barra"><i style="width:${Math.round(hechasHoy/enHoy.length*100)}%"></i></div><small>${hechasHoy===enHoy.length?"¡Todo hecho por hoy! 🎉":`${hechasHoy} de ${enHoy.length} hechas hoy`}</small>`:"";
+  prox.sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  $("tProxBloque").hidden=!prox.length;
+  $("tProx").innerHTML=prox.map(t=>tItem(t,`Para el ${bonita(t.fecha)} · ${restante(diasHasta(t.fecha)).toLowerCase()}`)).join("");
+  rut.sort((a,b)=>(a.creada||0)-(b.creada||0));
+  $("tRutBloque").hidden=!rut.length;
+  $("tRut").innerHTML=rut.map(t=>tItem(t,"↻ "+diasTxt(t.dias)+(t.dias.includes(dHoy)?" · hoy toca":""),{cl:"rutina",chk:false})).join("");
+  hechas.sort((a,b)=>(b.hechaEl||"").localeCompare(a.hechaEl||""));
+  $("tHechasBloque").hidden=!hechas.length;
+  $("tHechas").innerHTML=hechas.slice(0,30).map(t=>tItem(t,t.hechaEl?`Hecha el ${bonita(t.hechaEl)}`:"Hecha")).join("");
+  const pend=enHoy.length-hechasHoy; $("tBadge").textContent=pend?String(pend):"";
+}
+function toggleT(id){
+  const t=tareas.find(x=>x.id===id); if(!t)return; const h=iso(hoy());
+  if(esRutina(t)){
+    t.hechos??={}; if(t.hechos[h])delete t.hechos[h]; else t.hechos[h]=true;
+    const lim=iso(masDias(hoy(),-60)); for(const k of Object.keys(t.hechos))if(k<lim)delete t.hechos[k];
+  } else {t.hecha=!t.hecha; if(t.hecha)t.hechaEl=h; else delete t.hechaEl}
+  guardarT(); dibujarTareas();
+}
+document.addEventListener("click",ev=>{
+  const c=ev.target.closest("[data-tchk]"); if(c){if(!c.classList.contains("vacio"))toggleT(c.dataset.tchk);return}
+  const e=ev.target.closest("[data-ted]"); if(e){abrirT(e.dataset.ted);return}
+  const it=ev.target.closest(".t-item"); if(it&&!it.classList.contains("rutina"))toggleT(it.dataset.tid);
+  else if(it)abrirT(it.dataset.tid);
+});
+// selector de días reutilizable
+function selectorDias(cont,get,set,alCambiar){
+  const pintar=()=>{const d=get();cont.innerHTML=SEM.map(([n,l])=>`<button type="button" data-d="${n}" class="${d.includes(n)?"on":""}" title="${DIAS_L[n]}">${l}</button>`).join("")+
+    `<button type="button" class="t-todos ${d.length===7?"on":""}" data-d="all">Todos</button>`;alCambiar?.()};
+  cont.onclick=ev=>{const b=ev.target.closest("[data-d]");if(!b)return;let d=get();
+    if(b.dataset.d==="all")d=d.length===7?[]:[1,2,3,4,5,6,0];else{const n=Number(b.dataset.d);d=d.includes(n)?d.filter(x=>x!==n):[...d,n]}
+    set(d);pintar()};
+  return pintar;
+}
+let tDiasSel=[];
+const pintarTDias=selectorDias($("tDias"),()=>tDiasSel,d=>tDiasSel=d,()=>$("tFechaWrap").hidden=tDiasSel.length>0);
+pintarTDias();
+$("tForm").onsubmit=ev=>{
+  ev.preventDefault(); const txt=$("tTexto").value.trim(); if(!txt){$("tTexto").focus();return}
+  const t={id:nuevoId(),texto:txt,dias:[...tDiasSel].sort(),creada:Date.now()};
+  if(!t.dias.length){t.hecha=false;if($("tFecha").value)t.fecha=$("tFecha").value}
+  tareas.push(t); guardarT();
+  $("tTexto").value=""; $("tFecha").value=""; tDiasSel=[]; pintarTDias(); dibujarTareas(); $("tTexto").focus();
+};
+let tEditId=null, teDias=[];
+const pintarTeDias=selectorDias($("teDias"),()=>teDias,d=>teDias=d,()=>$("teFechaWrap").hidden=teDias.length>0);
+function abrirT(id){
+  const t=tareas.find(x=>x.id===id); if(!t)return; tEditId=id;
+  $("teTexto").value=t.texto; teDias=[...(t.dias||[])]; $("teFecha").value=t.fecha||""; pintarTeDias();
+  $("dlgT").showModal(); $("teTexto").focus();
+}
+$("teForm").onsubmit=ev=>{
+  const t=tareas.find(x=>x.id===tEditId); const txt=$("teTexto").value.trim();
+  if(!t||!txt){if(!txt)ev.preventDefault();return}
+  t.texto=txt; t.dias=[...teDias].sort();
+  if(t.dias.length){delete t.fecha;delete t.hecha;delete t.hechaEl}
+  else{delete t.hechos; t.hecha=!!t.hecha; if($("teFecha").value)t.fecha=$("teFecha").value; else delete t.fecha}
+  guardarT(); dibujarTareas();
+};
+$("teCancelar").onclick=()=>$("dlgT").close();
+$("teBorrar").onclick=()=>{const t=tareas.find(x=>x.id===tEditId);if(t&&confirm(`¿Eliminar la tarea «${t.texto}»?`)){tareas=tareas.filter(x=>x.id!==tEditId);guardarT();$("dlgT").close();dibujarTareas()}};
+$("tLimpiar").onclick=()=>{const h=iso(hoy());const n=tareas.filter(t=>!esRutina(t)&&t.hecha&&t.hechaEl!==h).length;
+  if(n&&confirm(`¿Borrar ${n===1?"la tarea hecha":"las "+n+" tareas hechas"}?`)){tareas=tareas.filter(t=>!(!esRutina(t)&&t.hecha&&t.hechaEl!==h));guardarT();dibujarTareas()}};
+
+// ---------- pestañas
+let vistaAct=(()=>{try{return localStorage.getItem("miAgenda.vista")||"cal"}catch{return"cal"}})();
+function ponerVista(v){
+  vistaAct=v; document.body.classList.toggle("v-tareas",v==="tareas");
+  document.querySelectorAll("[data-vista]").forEach(b=>b.classList.toggle("on",b.dataset.vista===v));
+  try{localStorage.setItem("miAgenda.vista",v)}catch{}
+  dibujarTareas();
+}
+document.querySelectorAll("[data-vista]").forEach(b=>b.onclick=()=>ponerVista(b.dataset.vista));
+ponerVista(vistaAct);
 
 // ---------- arranque
 let ultimoDia=iso(hoy());
@@ -444,17 +623,17 @@ try{db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:pers
 catch{db=initializeFirestore(app,{})}
 
 const $=id=>document.getElementById(id);
-let uid=null, unsub=null, sync=new Map(), registrar=false;
+let uid=null, unsubs=[], syncs={eventos:new Map(),tareas:new Map()}, registrar=false;
 
 // ----- guardar: solo sube lo que ha cambiado
-window.nube={guardar(arr){
+window.nube={guardar(arr,col="eventos"){
   if(!uid)return;
-  const ops=[], ids=new Set();
+  const sync=syncs[col], ops=[], ids=new Set();
   for(const e of arr){ids.add(e.id);const j=JSON.stringify(e);if(sync.get(e.id)!==j){ops.push(["set",e.id,JSON.parse(j)]);sync.set(e.id,j)}}
   for(const id of [...sync.keys()])if(!ids.has(id)){ops.push(["del",id]);sync.delete(id)}
   for(let i=0;i<ops.length;i+=400){
     const b=writeBatch(db);
-    for(const[t,id,d] of ops.slice(i,i+400)){const r=doc(db,"usuarios",uid,"eventos",id);t==="set"?b.set(r,d):b.delete(r)}
+    for(const[t,id,d] of ops.slice(i,i+400)){const r=doc(db,"usuarios",uid,col,id);t==="set"?b.set(r,d):b.delete(r)}
     b.commit().catch(err=>alert("No se pudo guardar en tu cuenta: "+err.message));
   }
 }};
@@ -469,22 +648,27 @@ function migrar(nube){
 }
 
 onAuthStateChanged(auth,user=>{
-  if(unsub){unsub();unsub=null}
+  unsubs.forEach(u=>u()); unsubs=[];
   $("loginCargando").hidden=true;
   if(!user){
-    uid=null; sync=new Map(); window.setEventos([]);
+    uid=null; syncs={eventos:new Map(),tareas:new Map()}; window.setEventos([]); window.setTareas([]);
     $("cuentaBtn").hidden=true; $("login").hidden=false; $("loginForm").hidden=false; $("lPass").value="";
     return;
   }
   uid=user.uid;
   $("login").hidden=true; $("cuentaBtn").hidden=false; $("cuentaBtn").textContent="👤 "+user.email;
   let primera=true;
-  unsub=onSnapshot(collection(db,"usuarios",uid,"eventos"),snap=>{
+  unsubs.push(onSnapshot(collection(db,"usuarios",uid,"eventos"),snap=>{
     const arr=snap.docs.map(d=>d.data());
-    sync=new Map(arr.map(e=>[e.id,JSON.stringify(e)]));
+    syncs.eventos=new Map(arr.map(e=>[e.id,JSON.stringify(e)]));
     window.setEventos(arr);
     if(primera){primera=false;migrar(arr)}
-  },err=>alert("No se pudo cargar tu agenda: "+err.message));
+  },err=>alert("No se pudo cargar tu agenda: "+err.message)));
+  unsubs.push(onSnapshot(collection(db,"usuarios",uid,"tareas"),snap=>{
+    const arr=snap.docs.map(d=>d.data());
+    syncs.tareas=new Map(arr.map(t=>[t.id,JSON.stringify(t)]));
+    window.setTareas(arr);
+  },err=>alert("No se pudieron cargar tus tareas: "+err.message)));
 });
 
 // ----- formulario de acceso
